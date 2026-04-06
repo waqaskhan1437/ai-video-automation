@@ -1,0 +1,61 @@
+name: Scheduled Video Generation
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      time_of_day:
+        description: 'Time to generate (morning/afternoon/evening)'
+        required: false
+        default: 'morning'
+
+jobs:
+  scheduled-generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Dependencies
+        run: npm install axios form-data
+      
+      - name: Generate Random Video
+        run: node scripts/generateClips.js '' 6
+      
+      - name: Setup FFmpeg
+        uses: gregordr/ffmpeg-action@v2
+      
+      - name: Merge Videos
+        run: |
+          mkdir -p clips
+          ls -v clips/*.mp4 > concat.txt
+          sed -i 's/^/file /' concat.txt
+          ffmpeg -f concat -safe 0 -i concat.txt -c copy merged_video.mp4
+      
+      - name: Upload to Catbox
+        run: |
+          response=$(curl -s -F "reqtype=fileUpload" -F "fileToUpload=@merged_video.mp4" https://catbox.moe/user/api.php)
+          echo "CATBOX_URL=$response" >> $GITHUB_ENV
+          echo "date=$(date -u)" >> $GITHUB_ENV
+      
+      - name: Create GitHub Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = process.env.CATBOX_URL;
+            const date = process.env.date;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🎬 AI Video Generated - ${new Date().toLocaleDateString()}`,
+              body: `## Video Generated Successfully!\n\n**Generated:** ${date}\n**Duration:** 60 seconds (6 clips × 10 seconds)\n**URL:** ${url}\n\n---\n*This issue was automatically created by the AI Video Automation workflow.*`
+            });

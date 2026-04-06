@@ -1,0 +1,106 @@
+name: Manual Video Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Video prompt'
+        required: false
+        default: ''
+      num_clips:
+        description: 'Number of clips (1-6)'
+        required: false
+        default: '6'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Dependencies
+        run: npm install axios form-data
+      
+      - name: Generate Clips
+        run: node scripts/generateClips.js "${{ inputs.prompt }}" ${{ inputs.num_clips }}
+      
+      - name: Upload Clips Info
+        uses: actions/upload-artifact@v4
+        with:
+          name: clips-info
+          path: clips.json
+      
+  merge:
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download Clips Info
+        uses: actions/download-artifact@v4
+        with:
+          name: clips-info
+          path: .
+      
+      - name: Download Clips
+        run: |
+          mkdir -p clips
+          cat clips.json | jq -c '.[]' | while read clip; do
+            url=$(echo $clip | jq -r '.url')
+            filename=$(echo $clip | jq -r '.filename')
+            curl -sL -o "clips/$filename" "$url"
+          done
+      
+      - name: Setup FFmpeg
+        uses: gregordr/ffmpeg-action@v2
+      
+      - name: Merge Videos
+        run: |
+          ls -v clips/*.mp4 > concat.txt
+          sed -i 's/^/file /' concat.txt
+          ffmpeg -f concat -safe 0 -i concat.txt -c copy merged_video.mp4
+      
+      - name: Upload Merged Video
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-video
+          path: merged_video.mp4
+      
+  upload:
+    needs: merge
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Video
+        uses: actions/download-artifact@v4
+        with:
+          name: merged-video
+          path: .
+      
+      - name: Upload to Catbox
+        id: catbox
+        run: |
+          response=$(curl -s -F "reqtype=fileUpload" -F "fileToUpload=@merged_video.mp4" https://catbox.moe/user/api.php)
+          echo "url=$response" >> $GITHUB_OUTPUT
+          echo "CATBOX_URL=$response" >> $GITHUB_ENV
+      
+      - name: Summary
+        run: |
+          echo "## 🎬 Video Generated Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Duration | ${{ inputs.num_clips || 6 }} × 10s = $((${{ inputs.num_clips || 6 }} * 10))s |" >> $GITHUB_STEP_SUMMARY
+          echo "| Prompt | ${{ inputs.prompt || 'Random' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Video URL** | **${{ env.CATBOX_URL }}** |" >> $GITHUB_STEP_SUMMARY

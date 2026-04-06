@@ -1,0 +1,13 @@
+{
+  "name": "ai-video-automation",
+  "version": "1.0.0",
+  "description": "AI Video Generation, Merging & Scheduling Automation using GitHub Actions",
+  "scripts": {
+    "generate": "node scripts/generateClips.js",
+    "upload": "node scripts/upload.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0"
+  }
+}

@@ -1,0 +1,144 @@
+name: AI Video Generation Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Video prompt (leave empty for random)'
+        required: false
+        default: ''
+      num_clips:
+        description: 'Number of clips (max 6 for free tier)'
+        required: false
+        default: '6'
+  schedule:
+    cron: '0 9 * * *'
+  repository_dispatch:
+    types: [generate-video]
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Dependencies
+        run: npm install axios form-data
+      
+      - name: Generate Video Clips
+        id: generate
+        run: node scripts/generateClips.js '${{ github.event.inputs.prompt || '' }}' ${{ github.event.inputs.num_clips || 6 }}
+      
+      - name: Upload Clips Info
+        uses: actions/upload-artifact@v4
+        with:
+          name: clips-info
+          path: clips.json
+          retention-days: 7
+
+  merge-videos:
+    needs: generate-video
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup FFmpeg
+        uses: gregordr/ffmpeg-action@v2
+      
+      - name: Download Clips Info
+        uses: actions/download-artifact@v4
+        with:
+          name: clips-info
+          path: .
+      
+      - name: Download Video Clips
+        run: |
+          mkdir -p clips
+          cat clips.json | jq -c '.[]' | while read clip; do
+            url=$(echo $clip | jq -r '.url')
+            filename=$(echo $clip | jq -r '.filename')
+            curl -sL -o "clips/$filename" "$url"
+          done
+      
+      - name: Create FFmpeg Concat List
+        run: |
+          ls -v clips/*.mp4 > concat.txt
+          sed -i 's/^/file /' concat.txt
+      
+      - name: Merge Videos
+        run: |
+          ffmpeg -f concat -safe 0 -i concat.txt -c copy merged_video.mp4
+          ls -lh merged_video.mp4
+      
+      - name: Upload Merged Video
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-video
+          path: merged_video.mp4
+          retention-days: 7
+
+  upload-catbox:
+    needs: merge-videos
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download Merged Video
+        uses: actions/download-artifact@v4
+        with:
+          name: merged-video
+          path: .
+      
+      - name: Upload to Catbox
+        id: upload
+        run: |
+          response=$(curl -s -F "reqtype=fileUpload" -F "fileToUpload=@merged_video.mp4" https://catbox.moe/user/api.php)
+          echo "CATBOX_URL=$response" >> $GITHUB_ENV
+          echo "url=$response" >> $GITHUB_OUTPUT
+      
+      - name: Display Result
+        run: |
+          echo "Video URL: ${{ env.CATBOX_URL }}"
+      
+      - name: Update Google Sheet
+        if: env.SHEET_WEBHOOK_URL != ''
+        run: |
+          curl -s -X POST "${{ env.SHEET_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"url":"${{ env.CATBOX_URL }}","status":"completed"}'
+      
+      - name: Discord Notification
+        if: env.DISCORD_WEBHOOK != ''
+        run: |
+          curl -s -X POST "${{ env.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{"content":"🎬 AI Video Generated!\nURL: ${{ env.CATBOX_URL }}"}'
+
+  save-to-sheet:
+    needs: upload-catbox
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Merged Video
+        uses: actions/download-artifact@v4
+        with:
+          name: merged-video
+          path: .
+      
+      - name: Upload Video URL to Sheet
+        run: |
+          echo "Video ready at: ${{ needs.upload-catbox.outputs.url }}"
+          echo "This step would update Google Sheet with the video URL"
