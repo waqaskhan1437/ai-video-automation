@@ -1,10 +1,10 @@
 # AI Video Automation
 
-Generate AI videos using ZSky AI API, merge 6x10-second clips into 1-minute videos, upload to Catbox, and schedule automated posting - all running on **GitHub Actions**.
+Generate AI videos using **Magic Hour API**, merge clips into 1-minute videos, upload to **Catbox**, and schedule automated posting - all running on **GitHub Actions**.
 
 ## Features
 
-- **AI Video Generation** - 6 clips × 10 seconds = 1 minute video
+- **AI Video Generation** - Magic Hour API (6 clips × 5 seconds = 30 seconds)
 - **Auto Merge** - FFmpeg merging via GitHub Actions
 - **Catbox Upload** - Free file hosting
 - **Scheduled Automation** - Daily, weekly, or on-demand
@@ -17,8 +17,8 @@ Generate AI videos using ZSky AI API, merge 6x10-second clips into 1-minute vide
 ┌─────────────────────────────────────────────────────────────────┐
 │                    GITHUB ACTIONS (Backend)                      │
 │  ┌─────────────┐  ┌─────────────┐  ┌────────────────────────┐  │
-│  │ Generate    │→ │ FFmpeg      │→ │ Upload to Catbox        │  │
-│  │ 6 Clips     │  │ Merge       │  │ Get URL                 │  │
+│  │ Magic Hour  │→ │ FFmpeg      │→ │ Upload to Catbox        │  │
+│  │ API Gen     │  │ Merge       │  │ Get URL                 │  │
 │  └─────────────┘  └─────────────┘  └────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                            ↓
@@ -26,7 +26,7 @@ Generate AI videos using ZSky AI API, merge 6x10-second clips into 1-minute vide
 │                    GITHUB PAGES (Frontend)                        │
 │  ┌─────────────┐  ┌─────────────┐  ┌────────────────────────┐  │
 │  │ Video       │  │ Schedule    │  │ View Generated Videos   │  │
-│  │ Player      │  │ Manager     │  │                         │  │
+│  │ Player      │  │ Manager     │  │ in GitHub Issues       │  │
 │  └─────────────┘  └─────────────┘  └────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -37,11 +37,27 @@ Generate AI videos using ZSky AI API, merge 6x10-second clips into 1-minute vide
 
 Click **"Use this template"** on GitHub to create your own copy.
 
-### 2. Enable GitHub Actions
+### 2. Get Magic Hour API Key (Required)
+
+1. Go to: https://magichour.ai/settings/developer
+2. Sign up / Login
+3. Create a new API Key
+4. Copy the key
+
+### 3. Add API Key to GitHub Secrets
+
+1. Go to your repository **Settings**
+2. Click **Secrets and variables** > **Actions**
+3. Click **New repository secret**
+4. Name: `MAGIC_HOUR_API_KEY`
+5. Value: Paste your API key
+6. Click **Add secret**
+
+### 4. Enable GitHub Actions
 
 Go to your repository's **Actions** tab and enable workflows.
 
-### 3. Generate Your First Video
+### 5. Generate Your First Video
 
 1. Go to **Actions** tab
 2. Click **"Manual Video Generation"** workflow
@@ -49,13 +65,21 @@ Go to your repository's **Actions** tab and enable workflows.
 4. Enter a prompt or leave empty for random
 5. Click **"Run workflow"**
 
-### 4. Wait for the Video
+### 6. Wait for the Video
 
 The workflow will:
-1. Generate 6 video clips (1-2 minutes)
-2. Merge them into 1 video (about 1 minute)
+1. Generate video clips using Magic Hour API (2-5 minutes)
+2. Merge them into 1 video
 3. Upload to Catbox (free hosting)
 4. Create a GitHub Issue with the video URL
+
+## Free Credits
+
+| Service | Free Limit | Notes |
+|---------|------------|-------|
+| **Magic Hour** | 400 initial + 100/day | Requires signup |
+| **Catbox** | Unlimited | Files stored 72h (free) |
+| **GitHub Actions** | 2000 min/month | Free tier |
 
 ## Workflows
 
@@ -64,13 +88,6 @@ The workflow will:
 | **Manual Video** | Button click | Generate video on-demand |
 | **Scheduled Video** | Daily at 9 AM | Auto-generate daily video |
 | **Video Pipeline** | API call | Full pipeline with notifications |
-
-## Video Generation
-
-- **Free Tier:** 50 videos/day from ZSky AI
-- **Clip Duration:** 10 seconds max (free tier)
-- **Total Video:** 6 clips × 10s = 60 seconds
-- **Quality:** 1080p with audio
 
 ## Project Structure
 
@@ -82,12 +99,11 @@ ai-video-automation/
 │       ├── scheduled-video.yml   # Daily auto-generation
 │       └── video-pipeline.yml    # Full pipeline
 ├── scripts/
-│   ├── generateClips.js          # ZSky AI integration
-│   └── upload.js                 # Catbox upload
+│   ├── generateClips.js          # Magic Hour API integration
+│   └── upload.js                # Catbox upload
 ├── frontend/
 │   ├── index.html                # Dashboard UI
-│   ├── styles.css
-│   └── app.js
+│   └── styles.css
 ├── package.json
 └── README.md
 ```
@@ -102,14 +118,17 @@ cd ai-video-automation
 # Install dependencies
 npm install
 
+# Set API key
+export MAGIC_HOUR_API_KEY="your_api_key_here"
+
 # Generate video with custom prompt
-npm run generate "A sunset over the ocean" 6
+node scripts/generateClips.js "A beautiful sunset over the ocean" 6
 
 # Generate random video
-npm run generate
+node scripts/generateClips.js
 
 # Upload to Catbox
-npm run upload merged_video.mp4
+curl -F "reqtype=fileUpload" -F "fileToUpload=@merged_video.mp4" https://catbox.moe/user/api.php
 ```
 
 ## Dashboard
@@ -143,29 +162,30 @@ Use the **Actions** tab to trigger manually anytime.
 All generated video URLs are saved:
 1. In GitHub Issues (created automatically)
 2. In workflow run logs
-3. In the dashboard (if configured)
-
-## Free Tier Limits
-
-| Service | Free Limit | Notes |
-|---------|------------|-------|
-| **ZSky AI** | 50 videos/day | 1080p, 10s per clip |
-| **Catbox** | Unlimited | Files stored 72h (free) |
-| **GitHub Actions** | 2000 min/month | Free tier |
+3. In the workflow summary
 
 ## Troubleshooting
 
 ### Video Generation Fails
-- Check ZSky API status at zsky.ai
-- Verify daily limit not exceeded
+- Check Magic Hour API key is correct
+- Verify credits not exhausted
 - Check workflow logs for errors
+- Ensure API key is added to GitHub Secrets (not just environment variables)
 
 ### Upload Fails
 - Catbox may have temporary issues
 - Try again after a few minutes
 
 ### Workflow Timeout
-- Increase timeout: `timeout-minutes: 30` in workflow file
+- Generation can take 5-10 minutes per clip
+- Magic Hour has queue times during peak hours
+
+## Demo Mode
+
+If you run the workflow without an API key, it will:
+1. Create placeholder files
+2. Show setup instructions
+3. Create a GitHub Issue with setup guide
 
 ## License
 
